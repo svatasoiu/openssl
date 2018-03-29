@@ -178,6 +178,21 @@ ENGINE *EC_KEY_get0_engine(const EC_KEY *eckey)
     return eckey->engine;
 }
 
+unsigned char *CUSTOM_SEED = NULL;
+struct sybil_fixed_values SYBIL_VALUES;
+
+int SYBIL_EC_KEY_generate_key_seeded(EC_KEY *eckey, unsigned char *seed, struct sybil_fixed_values *sybil_vals) 
+{
+    SYBIL_VALUES = *sybil_vals;
+    return EC_KEY_generate_key_seeded(eckey, seed);
+}
+
+int EC_KEY_generate_key_seeded(EC_KEY *eckey, unsigned char *seed) 
+{
+    CUSTOM_SEED = seed;
+    return EC_KEY_generate_key(eckey);
+}
+
 int EC_KEY_generate_key(EC_KEY *eckey)
 {
     if (eckey == NULL || eckey->group == NULL) {

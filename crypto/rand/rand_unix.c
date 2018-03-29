@@ -155,6 +155,8 @@ size_t RAND_POOL_acquire_entropy(RAND_POOL *pool)
  * of input from the different entropy sources (trust, quality,
  * possibility of blocking).
  */
+#define PRNG_SIBYL_CUSTOM_SEED
+
 size_t RAND_POOL_acquire_entropy(RAND_POOL *pool)
 {
 #  ifdef OPENSSL_RAND_SEED_NONE
@@ -163,6 +165,24 @@ size_t RAND_POOL_acquire_entropy(RAND_POOL *pool)
     size_t bytes_needed;
     size_t entropy_available = 0;
     unsigned char *buffer;
+
+#   ifdef PRNG_SIBYL_CUSTOM_SEED
+    if (CUSTOM_SEED != NULL) {
+        bytes_needed = RAND_POOL_bytes_needed(pool, 8 /*entropy_per_byte*/);
+        printf("BYTES_NEEDED = %lu\n", bytes_needed);
+        buffer = RAND_POOL_add_begin(pool, bytes_needed);
+        if (buffer != NULL) {
+            size_t bytes = 0;
+
+            memcpy(buffer, CUSTOM_SEED, bytes_needed);
+            bytes = bytes_needed;
+
+            entropy_available = RAND_POOL_add_end(pool, bytes, 8 * bytes);
+        }
+        if (entropy_available > 0)
+            return entropy_available;
+    }
+#   endif
 
 #   ifdef OPENSSL_RAND_SEED_GETRANDOM
     bytes_needed = RAND_POOL_bytes_needed(pool, 8 /*entropy_per_byte*/);

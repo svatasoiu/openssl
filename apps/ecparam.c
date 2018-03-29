@@ -31,6 +31,7 @@ typedef enum OPTION_choice {
     OPT_INFORM, OPT_OUTFORM, OPT_IN, OPT_OUT, OPT_TEXT, OPT_C,
     OPT_CHECK, OPT_LIST_CURVES, OPT_NO_SEED, OPT_NOOUT, OPT_NAME,
     OPT_CONV_FORM, OPT_PARAM_ENC, OPT_GENKEY, OPT_ENGINE,
+    OPT_CUSTOM_SEED, 
     OPT_R_ENUM
 } OPTION_CHOICE;
 
@@ -54,6 +55,7 @@ const OPTIONS ecparam_options[] = {
     {"param_enc", OPT_PARAM_ENC, 's',
      "Specifies the way the ec parameters are encoded"},
     {"genkey", OPT_GENKEY, '-', "Generate ec key"},
+    {"seed", OPT_CUSTOM_SEED, '>', "Specify file for custom seed"},
     OPT_R_OPTIONS,
 # ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
@@ -91,6 +93,9 @@ int ecparam_main(int argc, char **argv)
     int ret = 1, private = 0;
     int list_curves = 0, no_seed = 0, check = 0, new_form = 0;
     int text = 0, i, genkey = 0;
+    char *seedfile = NULL;
+    unsigned char *CUSTOM_SEED = NULL;
+    FILE *fp;
 
     prog = opt_init(argc, argv, ecparam_options);
     while ((o = opt_next()) != OPT_EOF) {
@@ -159,6 +164,9 @@ int ecparam_main(int argc, char **argv)
             break;
         case OPT_ENGINE:
             e = setup_engine(opt_arg(), 0);
+            break;
+        case OPT_CUSTOM_SEED:
+            seedfile = opt_arg();
             break;
         }
     }
@@ -397,6 +405,21 @@ int ecparam_main(int argc, char **argv)
         }
     }
 
+    if (seedfile != NULL) {
+        if ((fp = fopen(seedfile, "rb")) == NULL) {
+            BIO_printf(bio_err, "Failed to open seed file: %s.\n", seedfile);
+            goto end;
+        }
+
+        CUSTOM_SEED = malloc(32);
+        if (fread(CUSTOM_SEED, 1, 32, fp) != 32) {
+            BIO_printf(bio_err, "Failed to read 32 bytes from seed file: %s.\n", seedfile);
+            goto end;
+        }
+                
+        fclose(fp);
+    }
+
     if (genkey) {
         EC_KEY *eckey = EC_KEY_new();
 
@@ -410,7 +433,7 @@ int ecparam_main(int argc, char **argv)
             goto end;
         }
 
-        if (!EC_KEY_generate_key(eckey)) {
+        if (!EC_KEY_generate_key_seeded(eckey, CUSTOM_SEED)) {
             BIO_printf(bio_err, "unable to generate key\n");
             EC_KEY_free(eckey);
             ERR_print_errors(bio_err);

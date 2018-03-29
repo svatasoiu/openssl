@@ -160,6 +160,7 @@ static int rsa_builtin_keygen(RSA *rsa, int bits, int primes, BIGNUM *e_value,
 
         for (;;) {
  redo:
+            // printf("BN_generate_prime_ex\n");
             if (!BN_generate_prime_ex(prime, bitsr[i] + adj, 0, NULL, NULL, cb))
                 goto err;
             /*

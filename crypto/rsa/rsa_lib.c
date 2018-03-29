@@ -17,6 +17,14 @@
 #include "internal/evp_int.h"
 #include "rsa_locl.h"
 
+unsigned char *CUSTOM_SEED;
+
+RSA *RSA_new_seeded(unsigned char *seed)
+{
+    CUSTOM_SEED = seed;
+    return RSA_new_method(NULL);
+}
+
 RSA *RSA_new(void)
 {
     return RSA_new_method(NULL);

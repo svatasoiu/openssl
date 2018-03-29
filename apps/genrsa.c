@@ -27,6 +27,9 @@ NON_EMPTY_TRANSLATION_UNIT
 # include <openssl/pem.h>
 # include <openssl/rand.h>
 
+# include "crypto/bn/bn_lcl.h"
+# include "crypto/rsa/rsa_locl.h"
+
 # define DEFBITS 2048
 # define DEFPRIMES 2
 
@@ -36,6 +39,7 @@ typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
     OPT_3, OPT_F4, OPT_ENGINE,
     OPT_OUT, OPT_PASSOUT, OPT_CIPHER, OPT_PRIMES,
+    OPT_CUSTOM_SEED, 
     OPT_R_ENUM
 } OPTION_CHOICE;
 
@@ -52,6 +56,7 @@ const OPTIONS genrsa_options[] = {
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
 # endif
     {"primes", OPT_PRIMES, 'p', "Specify number of primes"},
+    {"seed", OPT_CUSTOM_SEED, '>', "Specify file for custom seed"},
     {NULL}
 };
 
@@ -68,7 +73,10 @@ int genrsa_main(int argc, char **argv)
     int ret = 1, num = DEFBITS, private = 0, primes = DEFPRIMES;
     unsigned long f4 = RSA_F4;
     char *outfile = NULL, *passoutarg = NULL, *passout = NULL;
+    char *seedfile = NULL;
+    unsigned char *CUSTOM_SEED = NULL;
     char *prog, *hexe, *dece;
+    FILE *fp;
     OPTION_CHOICE o;
 
     if (bn == NULL || cb == NULL)
@@ -115,6 +123,9 @@ opthelp:
             if (!opt_int(opt_arg(), &primes))
                 goto end;
             break;
+        case OPT_CUSTOM_SEED:
+            seedfile = opt_arg();
+            break;
         }
     }
     argc = opt_num_rest();
@@ -126,6 +137,21 @@ opthelp:
     } else if (argc > 0) {
         BIO_printf(bio_err, "Extra arguments given.\n");
         goto opthelp;
+    }
+
+    if (seedfile != NULL) {
+        if ((fp = fopen(seedfile, "rb")) == NULL) {
+            BIO_printf(bio_err, "Failed to open seed file: %s.\n", seedfile);
+            goto end;
+        }
+
+        CUSTOM_SEED = malloc(32);
+        if (fread(CUSTOM_SEED, 1, 32, fp) != 32) {
+            BIO_printf(bio_err, "Failed to read 32 bytes from seed file: %s.\n", seedfile);
+            goto end;
+        }
+                
+        fclose(fp);
     }
 
     private = 1;
@@ -140,13 +166,24 @@ opthelp:
 
     BIO_printf(bio_err, "Generating RSA private key, %d bit long modulus (%d primes)\n",
                num, primes);
-    rsa = eng ? RSA_new_method(eng) : RSA_new();
+    rsa = eng ? RSA_new_method(eng) : RSA_new_seeded(CUSTOM_SEED);
     if (rsa == NULL)
         goto end;
 
     if (!BN_set_word(bn, f4)
         || !RSA_generate_multi_prime_key(rsa, num, primes, bn, cb))
         goto end;
+
+    // printf("==========\n");
+    // printf("n: %lu\n", *rsa->n->d);
+    // printf("e: %lu\n", *rsa->e->d);
+    // printf("d: %lu\n", *rsa->d->d);
+    // printf("p: %lu\n", *rsa->p->d);
+    // printf("q: %lu\n", *rsa->q->d);
+    // printf("dmp1: %lu\n", *rsa->dmp1->d);
+    // printf("dmq1: %lu\n", *rsa->dmq1->d);
+    // printf("iqmp: %lu\n", *rsa->iqmp->d);
+    // printf("==========\n");
 
     RSA_get0_key(rsa, NULL, &e, NULL);
     hexe = BN_bn2hex(e);
@@ -159,10 +196,10 @@ opthelp:
     cb_data.password = passout;
     cb_data.prompt_info = outfile;
     assert(private);
-    if (!PEM_write_bio_RSAPrivateKey(out, rsa, enc, NULL, 0,
-                                     (pem_password_cb *)password_callback,
-                                     &cb_data))
-        goto end;
+    // if (!PEM_write_bio_RSAPrivateKey(out, rsa, enc, NULL, 0,
+    //                                  (pem_password_cb *)password_callback,
+    //                                  &cb_data))
+    //     goto end;
 
     ret = 0;
  end:

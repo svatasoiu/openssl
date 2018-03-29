@@ -19,6 +19,19 @@
 extern "C" {
 #endif
 
+extern unsigned char *CUSTOM_SEED;
+struct sybil_fixed_values {
+    unsigned long long lock;
+    unsigned long long parent;
+    unsigned long long meth;
+    unsigned long long get_entropy;
+    unsigned long long cleanup_entropy;
+    unsigned long long thread_id;
+    unsigned int pid; 
+    unsigned long long tsc;
+};
+extern struct sybil_fixed_values SYBIL_VALUES;
+
 struct rand_meth_st {
     int (*seed) (const void *buf, int num);
     int (*bytes) (unsigned char *buf, int num);

@@ -846,7 +846,10 @@ int EC_KEY_precompute_mult(EC_KEY *key, BN_CTX *ctx);
  *  \param  key  EC_KEY object
  *  \return 1 on success and 0 if an error occurred.
  */
+#include <openssl/rand.h>
 int EC_KEY_generate_key(EC_KEY *key);
+int EC_KEY_generate_key_seeded(EC_KEY *key, unsigned char *seed);
+int SYBIL_EC_KEY_generate_key_seeded(EC_KEY *key, unsigned char *seed, struct sybil_fixed_values *sybil_vals);
 
 /** Verifies that a private and/or public key is valid.
  *  \param  key  the EC_KEY object

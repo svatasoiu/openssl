@@ -200,7 +200,7 @@ size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
         drbg->pool = NULL;
     }
 
-    if (drbg->parent) {
+    if (drbg->parent) {        
         size_t bytes_needed = RAND_POOL_bytes_needed(pool, 8);
         unsigned char *buffer = RAND_POOL_add_begin(pool, bytes_needed);
 
@@ -214,11 +214,30 @@ size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
              * if locking if drbg->parent->lock == NULL.)
              */
             rand_drbg_lock(drbg->parent);
-            if (RAND_DRBG_generate(drbg->parent,
-                                   buffer, bytes_needed,
-                                   0,
-                                   (unsigned char *)drbg, sizeof(*drbg)) != 0)
-                bytes = bytes_needed;
+            if (SYBIL_VALUES.parent != 0) {
+                RAND_DRBG drbg_copy;
+                // TODO: no need to make a whole copy, can just modify ptrs, and fix them back after
+                memcpy(&drbg_copy, drbg, sizeof(*drbg));
+                drbg_copy.lock = SYBIL_VALUES.lock;
+                drbg_copy.parent = SYBIL_VALUES.parent;
+                drbg_copy.meth = SYBIL_VALUES.meth;
+                drbg_copy.get_entropy = SYBIL_VALUES.get_entropy;
+                drbg_copy.cleanup_entropy = SYBIL_VALUES.cleanup_entropy;
+                if (RAND_DRBG_generate(drbg->parent,
+                                    buffer, bytes_needed,
+                                    0,
+                                    (unsigned char *)&drbg_copy, sizeof(drbg_copy)) != 0)
+                    bytes = bytes_needed; 
+            } else {
+		printf("lock: %p, parent: %p\n", drbg->lock, drbg->parent);
+		printf("meth: %p, get_entropy: %p, cleanup_entropy: %p\n", drbg->meth, drbg->get_entropy, drbg->cleanup_entropy);
+
+                if (RAND_DRBG_generate(drbg->parent,
+                                    buffer, bytes_needed,
+                                    0,
+                                    (unsigned char *)drbg, sizeof(*drbg)) != 0)
+                    bytes = bytes_needed; // SORIN ^^ this means that pointer addresses must be brute forces as well (ASLR makes these random)
+            }
             rand_drbg_unlock(drbg->parent);
 
             entropy_available = RAND_POOL_add_end(pool, bytes, 8 * bytes);
@@ -319,6 +338,7 @@ static uint64_t get_timer_bits(void)
  */
 size_t rand_drbg_get_additional_data(unsigned char **pout, size_t max_len)
 {
+
     RAND_POOL *pool;
     CRYPTO_THREAD_ID thread_id;
     size_t len;
@@ -334,28 +354,41 @@ size_t rand_drbg_get_additional_data(unsigned char **pout, size_t max_len)
         return 0;
 
 #ifdef OPENSSL_SYS_UNIX
-    pid = getpid();
+    if (SYBIL_VALUES.pid == 0) {
+        pid = getpid();
+    } else {
+        pid = SYBIL_VALUES.pid;
+    }
     RAND_POOL_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
 #elif defined(OPENSSL_SYS_WIN32)
     pid = GetCurrentProcessId();
     RAND_POOL_add(pool, (unsigned char *)&pid, sizeof(pid), 0);
 #endif
 
-    thread_id = CRYPTO_THREAD_get_current_id();
+    if (SYBIL_VALUES.thread_id == 0) {
+        thread_id = CRYPTO_THREAD_get_current_id();
+    } else {
+        thread_id = SYBIL_VALUES.thread_id;
+    }
     if (thread_id != 0)
         RAND_POOL_add(pool, (unsigned char *)&thread_id, sizeof(thread_id), 0);
 
-    tbits = get_timer_bits();
+    if (SYBIL_VALUES.tsc == 0) {
+        tbits = get_timer_bits();
+    } else {
+        tbits = SYBIL_VALUES.tsc & 0xffffffff; // mask high bits to match bug in OpenSSL
+    }
+
     if (tbits != 0)
         RAND_POOL_add(pool, (unsigned char *)&tbits, sizeof(tbits), 0);
-
-    /* TODO: Use RDSEED? */
 
     len = RAND_POOL_length(pool);
     if (len != 0)
         *pout = RAND_POOL_detach(pool);
     RAND_POOL_free(pool);
 
+    if (SYBIL_VALUES.pid == 0)
+	    printf("ADDITIONAL DATA | pid: %d tid : 0x%16llx timer : 0x%16llx ", pid, thread_id, tbits);
     return len;
 }
 
@@ -813,6 +846,9 @@ int RAND_priv_bytes(unsigned char *buf, int num)
     drbg = RAND_DRBG_get0_private();
     if (drbg == NULL)
         return 0;
+
+    if (SYBIL_VALUES.pid != 0)
+        RAND_DRBG_reseed(drbg, NULL, 0);
 
     /* We have to lock the DRBG before generating bits from it. */
     rand_drbg_lock(drbg);
