@@ -217,8 +217,9 @@ size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
             if (SYBIL_VALUES.parent != 0) {
                 RAND_DRBG drbg_copy;
                 // TODO: no need to make a whole copy, can just modify ptrs, and fix them back after
-                memcpy(&drbg_copy, drbg, sizeof(*drbg));
-                drbg_copy.lock = SYBIL_VALUES.lock;
+                static unsigned long long LOCK_COUNT = 0;
+		        memcpy(&drbg_copy, drbg, sizeof(*drbg));
+                drbg_copy.lock = ((LOCK_COUNT++ & 1) == 0) ? SYBIL_VALUES.public_lock : SYBIL_VALUES.private_lock;
                 drbg_copy.parent = SYBIL_VALUES.parent;
                 drbg_copy.meth = SYBIL_VALUES.meth;
                 drbg_copy.get_entropy = SYBIL_VALUES.get_entropy;
@@ -229,8 +230,8 @@ size_t rand_drbg_get_entropy(RAND_DRBG *drbg,
                                     (unsigned char *)&drbg_copy, sizeof(drbg_copy)) != 0)
                     bytes = bytes_needed; 
             } else {
-		printf("lock: %p, parent: %p\n", drbg->lock, drbg->parent);
-		printf("meth: %p, get_entropy: %p, cleanup_entropy: %p\n", drbg->meth, drbg->get_entropy, drbg->cleanup_entropy);
+		        printf("lock: %p, parent: %p\n", drbg->lock, drbg->parent);
+		        printf("meth: %p, get_entropy: %p, cleanup_entropy: %p\n", drbg->meth, drbg->get_entropy, drbg->cleanup_entropy);
 
                 if (RAND_DRBG_generate(drbg->parent,
                                     buffer, bytes_needed,
@@ -846,9 +847,6 @@ int RAND_priv_bytes(unsigned char *buf, int num)
     drbg = RAND_DRBG_get0_private();
     if (drbg == NULL)
         return 0;
-
-    if (SYBIL_VALUES.pid != 0)
-        RAND_DRBG_reseed(drbg, NULL, 0);
 
     /* We have to lock the DRBG before generating bits from it. */
     rand_drbg_lock(drbg);

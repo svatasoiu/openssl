@@ -1007,8 +1007,8 @@ RAND_DRBG *RAND_DRBG_get0_public(void)
  */
 RAND_DRBG *RAND_DRBG_get0_private(void)
 {
-    if (!RUN_ONCE(&rand_drbg_init, do_rand_drbg_init))
-        return NULL;
+    rand_drbg_cleanup_int();
+    do_rand_drbg_init();
 
     return drbg_private;
 }

@@ -21,7 +21,8 @@ extern "C" {
 
 extern unsigned char *CUSTOM_SEED;
 struct sybil_fixed_values {
-    unsigned long long lock;
+    unsigned long long private_lock;
+    unsigned long long public_lock;
     unsigned long long parent;
     unsigned long long meth;
     unsigned long long get_entropy;
